@@ -42,16 +42,47 @@ export async function fetchAllRssFeeds(feedUrls: string[]): Promise<ResearchInpu
   return results;
 }
 
+/** PostgREST PGRST102 "Empty or invalid json" — usually bad JSONB. Force plain JSON. */
+function safeJsonb(meta: Record<string, unknown>): Record<string, unknown> {
+  const plain: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    if (v === undefined) continue;
+    if (v === null) {
+      plain[k] = null;
+      continue;
+    }
+    if (typeof v === 'string' || typeof v === 'boolean' || typeof v === 'number') {
+      if (typeof v === 'number' && (!Number.isFinite(v) || Number.isNaN(v))) continue;
+      plain[k] = v;
+    } else {
+      plain[k] = String(v);
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(plain)) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function safeText(s: string | null | undefined, max: number): string | null {
+  if (s == null) return null;
+  const t = String(s)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .slice(0, max);
+  return t.length ? t : null;
+}
+
 export async function saveResearchItem(input: ResearchInput): Promise<string> {
   const { data, error } = await supabase
     .from('research_items')
     .insert({
       source_type: input.source_type,
       source_url: input.source_url ?? null,
-      title: input.title,
-      summary: input.summary ?? null,
-      raw_content: input.raw_content ?? null,
-      metadata: input.metadata ?? {},
+      title: safeText(input.title, 5000) ?? 'Untitled',
+      summary: safeText(input.summary ?? null, 2000),
+      raw_content: safeText(input.raw_content ?? null, 50000),
+      metadata: safeJsonb(input.metadata ?? {}),
     })
     .select('id')
     .single();
@@ -75,8 +106,13 @@ export async function runResearchCycle(): Promise<{ saved: number; rss: number; 
   const rssItems =
     feedUrls.length > 0 ? await fetchAllRssFeeds(feedUrls) : [];
 
-  const { fetchTwitterResearchInputs } = await import('@/agents/twitterResearch');
-  const twitterItems = await fetchTwitterResearchInputs();
+  let twitterItems: Awaited<
+    ReturnType<typeof import('@/agents/twitterResearch').fetchTwitterResearchInputs>
+  > = [];
+  if (process.env.RESEARCH_TWITTER_ON_HEARTBEAT === 'true') {
+    const { fetchTwitterResearchInputs } = await import('@/agents/twitterResearch');
+    twitterItems = await fetchTwitterResearchInputs();
+  }
 
   const items = [...rssItems, ...twitterItems];
   if (items.length === 0) {
@@ -92,4 +128,56 @@ export async function runResearchCycle(): Promise<{ saved: number; rss: number; 
   const rssNew = newItems.filter((i) => i.source_type === 'rss').length;
   const twitterNew = newItems.filter((i) => i.source_type === 'twitter').length;
   return { saved: saved.length, rss: rssNew, twitter: twitterNew };
+}
+
+/** Twitter search only (for Reply targets UI). Dedupes like full cycle. */
+export async function runTwitterResearchOnly(): Promise<{
+  saved: number;
+  fetched: number;
+  queriesUsed?: number;
+  blocked?: 'no_queries' | 'no_x_keys';
+  xErrors?: string[];
+  note?: string;
+}> {
+  const { fetchTwitterResearchWithDiagnostics } = await import('@/agents/twitterResearch');
+  const { items: twitterItems, errors: xErrors, blocked, queriesUsed } =
+    await fetchTwitterResearchWithDiagnostics();
+  if (blocked) {
+    return {
+      saved: 0,
+      fetched: 0,
+      blocked,
+      queriesUsed: 0,
+      xErrors: xErrors.length ? xErrors : undefined,
+    };
+  }
+  if (twitterItems.length === 0) {
+    return {
+      saved: 0,
+      fetched: 0,
+      queriesUsed,
+      xErrors: xErrors.length ? xErrors : undefined,
+      note:
+        xErrors.length > 0
+          ? 'Every search query failed (see errors). Often 403 = need paid X API tier for recent search.'
+          : undefined,
+    };
+  }
+  const existing = await supabase.from('research_items').select('title, source_url').limit(5000);
+  const existingSet = new Set(
+    (existing.data ?? []).map((r) => `${r.title}|${r.source_url ?? ''}`)
+  );
+  const newItems = twitterItems.filter((i) => !existingSet.has(`${i.title}|${i.source_url ?? ''}`));
+  const saved = newItems.length ? await saveResearchItems(newItems) : [];
+  const note =
+    saved.length === 0 && twitterItems.length > 0
+      ? `${twitterItems.length} tweet(s) from X were already in the DB (dedupe). List below may still be empty if you never had twitter rows — try a new query.`
+      : undefined;
+  return {
+    saved: saved.length,
+    fetched: twitterItems.length,
+    queriesUsed,
+    xErrors: xErrors.length ? xErrors : undefined,
+    note,
+  };
 }

@@ -34,14 +34,14 @@ CREATE TABLE IF NOT EXISTS public.post_ideas (
 CREATE INDEX IF NOT EXISTS idx_post_ideas_created ON public.post_ideas(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_post_ideas_status ON public.post_ideas(status);
 
--- Draft posts (tweets, threads, replies, substack)
+-- Draft posts (tweets, threads, Substack only — replies live in reply_drafts)
 CREATE TABLE IF NOT EXISTS public.draft_posts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   post_idea_id UUID REFERENCES public.post_ideas(id),
-  draft_type TEXT NOT NULL, -- 'tweet' | 'thread' | 'reply' | 'substack_outline'
+  draft_type TEXT NOT NULL, -- 'tweet' | 'thread' | 'substack_outline'
   content TEXT, -- single tweet or first tweet of thread
   thread_tweets TEXT[], -- for threads: [tweet2, tweet3, ...]
-  reply_to_post_id TEXT, -- X post id when draft_type = 'reply'
+  reply_to_post_id TEXT, -- legacy; unused for new rows
   reply_to_author TEXT,
   metadata JSONB DEFAULT '{}',
   status TEXT DEFAULT 'draft', -- 'draft' | 'approved' | 'published' | 'rejected'
@@ -55,10 +55,27 @@ CREATE INDEX IF NOT EXISTS idx_draft_posts_status ON public.draft_posts(status);
 CREATE INDEX IF NOT EXISTS idx_draft_posts_type ON public.draft_posts(draft_type);
 CREATE INDEX IF NOT EXISTS idx_draft_posts_created ON public.draft_posts(created_at DESC);
 
+-- Reply drafts (separate from post drafts; Reply targets → Draft reply)
+CREATE TABLE IF NOT EXISTS public.reply_drafts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content TEXT NOT NULL,
+  reply_to_post_id TEXT NOT NULL,
+  reply_to_author TEXT,
+  metadata JSONB DEFAULT '{}',
+  status TEXT DEFAULT 'draft',
+  published_at TIMESTAMPTZ,
+  published_post_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reply_drafts_status ON public.reply_drafts(status);
+CREATE INDEX IF NOT EXISTS idx_reply_drafts_created ON public.reply_drafts(created_at DESC);
+
 -- Published posts (record of what went out)
 CREATE TABLE IF NOT EXISTS public.published_posts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   draft_post_id UUID REFERENCES public.draft_posts(id),
+  reply_draft_id UUID REFERENCES public.reply_drafts(id) ON DELETE SET NULL,
   platform TEXT NOT NULL, -- 'x' | 'substack'
   platform_post_id TEXT,
   content_preview TEXT,

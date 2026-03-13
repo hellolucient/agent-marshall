@@ -10,7 +10,6 @@ import { runResearchCycle } from '@/agents/researcher';
 import { runIdeaGenerationCycle } from '@/agents/ideaGenerator';
 import { runSwarmCycle } from '@/agents/swarm';
 import { runDailyWriting } from '@/agents/writer';
-import { runEngagerCycle } from '@/agents/engager';
 import { runNetworkerCycle } from '@/agents/networker';
 import { runWeeklyWriting } from '@/agents/writer';
 import { runReflectionCycle } from '@/agents/reflector';
@@ -29,14 +28,17 @@ export async function runDaily(): Promise<Record<string, unknown>> {
   );
   log('Starting daily run…');
   log('(Swarm is slow: each idea runs 5 LLM roles in series — can be many minutes.)');
-  log(`Swarm limit this run: ${swarmLimit} ideas (set HEARTBEAT_SWARM_LIMIT to change)`);
+  log(`Swarm limit this run: ${swarmLimit} ideas (must be ≥ daily tweet draft count; set HEARTBEAT_SWARM_LIMIT)`);
 
-  log('1/5 Research (RSS + optional Twitter)…');
+  log('1/5 Research (RSS; Twitter only if RESEARCH_TWITTER_ON_HEARTBEAT=true)…');
   const research = await runResearchCycle();
   log(
     `   research saved: ${research.saved}` +
       (research.rss !== undefined ? ` (rss ${research.rss}, twitter ${research.twitter})` : '')
   );
+  if (process.env.RESEARCH_TWITTER_ON_HEARTBEAT !== 'true') {
+    log('   (Twitter skipped on heartbeat — use Reply targets → Refresh to pull tweets.)');
+  }
 
   log('2/5 Idea generation (1 LLM call)…');
   const ideas = await runIdeaGenerationCycle();

@@ -32,17 +32,23 @@ async function getPublishedInPeriod(start: Date, end: Date): Promise<{ count: nu
 }
 
 async function getDraftsInPeriod(start: Date, end: Date): Promise<{ tweets: number; threads: number; replies: number }> {
-  const { data, error } = await supabase
+  const { data: posts, error: e1 } = await supabase
     .from('draft_posts')
     .select('draft_type')
+    .neq('draft_type', 'reply')
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString());
-  if (error) throw error;
-  const out = { tweets: 0, threads: 0, replies: 0 };
-  for (const row of data ?? []) {
+  if (e1) throw e1;
+  const { count: replyCount, error: e2 } = await supabase
+    .from('reply_drafts')
+    .select('*', { count: 'exact', head: true })
+    .gte('created_at', start.toISOString())
+    .lte('created_at', end.toISOString());
+  if (e2) throw e2;
+  const out = { tweets: 0, threads: 0, replies: replyCount ?? 0 };
+  for (const row of posts ?? []) {
     if (row.draft_type === 'tweet') out.tweets++;
     if (row.draft_type === 'thread') out.threads++;
-    if (row.draft_type === 'reply') out.replies++;
   }
   return out;
 }

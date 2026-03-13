@@ -16,13 +16,17 @@ export type AccountRecommendation = {
 
 const MAX_RECOMMENDATIONS_PER_DAY = 5;
 
+function normHandle(h: string) {
+  return h.trim().toLowerCase().replace(/^@/, '');
+}
+
 export async function getAlreadyRecommendedHandles(): Promise<Set<string>> {
   const { data, error } = await supabase
     .from('followed_accounts')
     .select('handle')
     .in('status', ['recommended', 'followed', 'dismissed']);
   if (error) throw error;
-  return new Set((data ?? []).map((r) => r.handle.toLowerCase()));
+  return new Set((data ?? []).map((r) => normHandle(r.handle)));
 }
 
 export async function recommendAccountsFromContext(context: string): Promise<AccountRecommendation[]> {
@@ -38,8 +42,8 @@ export async function recommendAccountsFromContext(context: string): Promise<Acc
   const seen = await getAlreadyRecommendedHandles();
   for (const line of lines) {
     const parts = line.split('|').map((p) => p.trim());
-    const handle = parts[0]?.replace('@', '') ?? '';
-    if (!handle || seen.has(handle.toLowerCase())) continue;
+    const handle = (parts[0]?.replace(/^@/, '') ?? '').trim().toLowerCase();
+    if (!handle || seen.has(handle)) continue;
     recs.push({
       handle,
       display_name: parts[1],

@@ -48,7 +48,7 @@ export type PostIdea = {
 export type DraftPost = {
   id: string;
   post_idea_id: string | null;
-  draft_type: 'tweet' | 'thread' | 'reply' | 'substack_outline';
+  draft_type: 'tweet' | 'thread' | 'substack_outline';
   content: string | null;
   thread_tweets: string[] | null;
   reply_to_post_id: string | null;

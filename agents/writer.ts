@@ -1,6 +1,6 @@
 /**
- * Writer Agent — Generate drafts: 2 daily tweets, 1 weekly thread, 1 weekly Substack outline.
- * Uses top-scoring ideas from swarm; writes in Marshall's voice.
+ * Writer Agent — Generate drafts: N daily tweet drafts (default 5), weekly thread + Substack.
+ * Daily tweets use top swarm-scored ideas (any idea type → one tweet each).
  */
 
 import { complete } from '@/lib/llm';
@@ -17,6 +17,18 @@ async function getTopIdeasByType(type: string, limit: number): Promise<PostIdea[
     .from('post_ideas')
     .select('*')
     .eq('idea_type', type)
+    .not('aggregate_score', 'is', null)
+    .order('aggregate_score', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as PostIdea[];
+}
+
+/** Top scored ideas regardless of type (for N standalone tweet drafts). */
+async function getTopScoredIdeas(limit: number): Promise<PostIdea[]> {
+  const { data, error } = await supabase
+    .from('post_ideas')
+    .select('*')
     .not('aggregate_score', 'is', null)
     .order('aggregate_score', { ascending: false })
     .limit(limit);
@@ -60,12 +72,23 @@ async function writeSubstackOutlineFromIdea(idea: PostIdea): Promise<{ title: st
   return { title, outline, body_notes };
 }
 
+function dailyTweetDraftLimit(): number {
+  const n = parseInt(process.env.DAILY_TWEET_DRAFT_LIMIT ?? '5', 10);
+  return Math.max(1, Math.min(20, Number.isFinite(n) ? n : 5));
+}
+
+/** One tweet draft per top-scored idea (same idea types as swarm; each rendered as a single tweet). */
 export async function generateDailyTweets(): Promise<DraftTweet[]> {
-  const ideas = await getTopIdeasByType('tweet', 3);
+  const limit = dailyTweetDraftLimit();
+  const ideas = await getTopScoredIdeas(limit);
   const drafts: DraftTweet[] = [];
-  for (const idea of ideas.slice(0, 2)) {
-    const content = await writeTweetFromIdea(idea);
-    if (content.length <= 280) drafts.push({ content, idea_id: idea.id });
+  for (const idea of ideas) {
+    try {
+      const content = await writeTweetFromIdea(idea);
+      if (content.length <= 280) drafts.push({ content, idea_id: idea.id });
+    } catch (e) {
+      console.error('writeTweetFromIdea', idea.id, e);
+    }
   }
   return drafts;
 }
@@ -135,7 +158,7 @@ export async function saveDraftSubstack(draft: DraftSubstack): Promise<string> {
   return data.id;
 }
 
-/** Run daily writing: 2 tweets. */
+/** Run daily writing: DAILY_TWEET_DRAFT_LIMIT tweet drafts (default 5). */
 export async function runDailyWriting(): Promise<{ tweets: number }> {
   const tweets = await generateDailyTweets();
   for (const t of tweets) await saveDraftTweet(t);

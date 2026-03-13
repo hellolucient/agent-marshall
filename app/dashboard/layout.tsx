@@ -21,7 +21,19 @@ export default function DashboardLayout({
               href="/dashboard"
               className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg px-4 py-2 text-base font-medium text-stone-300 transition hover:bg-stone-800 hover:text-stone-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
             >
-              Drafts
+              Post drafts
+            </Link>
+            <Link
+              href="/dashboard/reply-drafts"
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg px-4 py-2 text-base font-medium text-stone-300 transition hover:bg-stone-800 hover:text-stone-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/40"
+            >
+              Reply drafts
+            </Link>
+            <Link
+              href="/dashboard/replies"
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg px-4 py-2 text-base font-medium text-stone-300 transition hover:bg-stone-800 hover:text-stone-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
+            >
+              Reply targets
             </Link>
             <Link
               href="/dashboard/follows"

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 type Draft = {
   id: string;
@@ -10,12 +11,18 @@ type Draft = {
   reply_to_author: string | null;
   status: string;
   created_at: string;
-  metadata?: { outline?: string; body_notes?: string };
+  metadata?: {
+    outline?: string;
+    body_notes?: string;
+    target_tweet_url?: string;
+  };
 };
 
-type Tab = 'tweet' | 'thread' | 'reply' | 'substack_outline';
+type Tab = 'tweet' | 'thread' | 'substack_outline';
 
-export default function DashboardPage() {
+function DashboardPageInner() {
+  const searchParams = useSearchParams();
+  const highlightRef = useRef<string | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [tab, setTab] = useState<Tab | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -24,29 +31,88 @@ export default function DashboardPage() {
   const [editContent, setEditContent] = useState('');
   const [heartbeatBusy, setHeartbeatBusy] = useState(false);
   const [heartbeatMsg, setHeartbeatMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [draftActionMsg, setDraftActionMsg] = useState<string | null>(null);
 
   const fetchDrafts = async () => {
+    setDrafts([]);
     setLoading(true);
     const params = new URLSearchParams();
     if (tab !== 'all') params.set('type', tab);
     if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
-    const res = await fetch(`/api/drafts?${params}`);
+    params.set('limit', '250');
+    params.set('_t', String(Date.now()));
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/drafts?${params}`;
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    });
     const data = await res.json();
     setDrafts(Array.isArray(data) ? data : []);
     setLoading(false);
   };
 
   useEffect(() => {
+    const t = searchParams.get('tab') as Tab | null;
+    if (t && ['tweet', 'thread', 'substack_outline'].includes(t)) setTab(t);
+    const h = searchParams.get('highlight');
+    if (h) highlightRef.current = h;
+  }, [searchParams]);
+
+  useEffect(() => {
     fetchDrafts();
   }, [tab, statusFilter]);
 
+  /** BFCache / tab restore can resurrect old React state while DB is empty — always refetch. */
+  useEffect(() => {
+    const refetch = () => fetchDrafts();
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) refetch();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refetch();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [tab, statusFilter]);
+
+  useEffect(() => {
+    if (!highlightRef.current || loading || drafts.length === 0) return;
+    const id = highlightRef.current;
+    highlightRef.current = null;
+    const el = document.getElementById(`draft-${id}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el?.classList.add('ring-2', 'ring-amber-500', 'ring-offset-2', 'ring-offset-stone-950');
+    const t = window.setTimeout(() => el?.classList.remove('ring-2', 'ring-amber-500', 'ring-offset-2', 'ring-offset-stone-950'), 4000);
+    return () => clearTimeout(t);
+  }, [loading, drafts]);
+
   const updateStatus = async (id: string, status: string) => {
-    await fetch(`/api/drafts/${id}`, {
+    setDraftActionMsg(null);
+    const res = await fetch(`/api/drafts/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     });
-    fetchDrafts();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert((data as { error?: string }).error || `Update failed (${res.status})`);
+      return;
+    }
+    /* Status filter "draft" only lists drafts — approving makes this row disappear. Show all / matching new status. */
+    if (status === 'approved') {
+      setStatusFilter('approved');
+      setDraftActionMsg('Saved as approved. Status filter set to Approved so this card stays visible — use Publish when ready.');
+    } else if (status === 'rejected') {
+      setStatusFilter('rejected');
+      setDraftActionMsg('Marked rejected. Filter set to Rejected.');
+    } else {
+      setStatusFilter('all');
+    }
+    await fetchDrafts();
   };
 
   const saveEdit = async (id: string) => {
@@ -67,7 +133,7 @@ export default function DashboardPage() {
   };
 
   const typeLabel = (t: string) =>
-    ({ tweet: 'Tweet', thread: 'Thread', reply: 'Reply', substack_outline: 'Substack' }[t] ?? t);
+    ({ tweet: 'Tweet', thread: 'Thread', substack_outline: 'Substack' }[t] ?? t);
 
   const tabBtn = (active: boolean) =>
     active
@@ -213,15 +279,19 @@ export default function DashboardPage() {
       </section>
 
       <div className="space-y-2 border-t border-stone-800 pt-6 sm:pt-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-stone-100 sm:text-3xl">Drafts</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-stone-100 sm:text-3xl">Post drafts</h1>
         <p className="text-base text-stone-300 sm:text-lg">
-          Filter by type and status, then edit, approve, or publish.
+          Tweets, threads, Substack outlines — not replies.{' '}
+          <a href="/dashboard/reply-drafts" className="text-sky-400 underline hover:text-sky-300">
+            Reply drafts
+          </a>{' '}
+          are separate.
         </p>
       </div>
 
       <div className="flex flex-col gap-4 rounded-2xl border border-stone-700/90 bg-stone-900/60 p-4 sm:p-5">
         <div className="flex flex-wrap gap-2 sm:gap-3">
-          {(['all', 'tweet', 'thread', 'reply', 'substack_outline'] as const).map((t) => (
+          {(['all', 'tweet', 'thread', 'substack_outline'] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -236,6 +306,14 @@ export default function DashboardPage() {
           <label htmlFor="draft-status" className="text-base font-medium text-stone-200 sm:shrink-0">
             Status
           </label>
+          <button
+            type="button"
+            onClick={() => fetchDrafts()}
+            disabled={loading}
+            className="min-h-[48px] shrink-0 rounded-xl border border-stone-500 bg-stone-800 px-4 py-2.5 text-base font-medium text-stone-100 hover:bg-stone-700 disabled:opacity-50"
+          >
+            Refresh list
+          </button>
           <select
             id="draft-status"
             value={statusFilter}
@@ -248,8 +326,23 @@ export default function DashboardPage() {
             <option value="published">Published</option>
             <option value="rejected">Rejected</option>
           </select>
+          <p className="text-sm text-stone-500 sm:max-w-xl">
+            DB empty but old cards still here? Hard-refresh (Cmd+Shift+R) or <strong className="text-stone-400">Refresh list</strong>.
+            Deployed app must use the same Supabase project you cleared.
+          </p>
+          <p className="text-sm text-stone-500 sm:max-w-xl">
+            Tip: With <strong className="text-stone-400">Draft</strong> selected, approving removes the card from the list
+            (it’s no longer a draft). Use <strong className="text-stone-400">All statuses</strong> or we’ll switch to{' '}
+            <strong className="text-stone-400">Approved</strong> after you click Approve.
+          </p>
         </div>
       </div>
+
+      {draftActionMsg && (
+        <p className="rounded-xl border border-emerald-900/50 bg-emerald-950/30 px-4 py-3 text-base text-emerald-100">
+          {draftActionMsg}
+        </p>
+      )}
 
       {loading ? (
         <p className="text-lg text-stone-300">Loading…</p>
@@ -260,7 +353,8 @@ export default function DashboardPage() {
           {drafts.map((d) => (
             <li
               key={d.id}
-              className="overflow-hidden rounded-2xl border border-stone-600 bg-stone-900 shadow-lg shadow-black/25"
+              id={`draft-${d.id}`}
+              className="overflow-hidden rounded-2xl border border-stone-600 bg-stone-900 shadow-lg shadow-black/25 transition-shadow"
             >
               {/* High-contrast meta strip: reads clearly vs card body */}
               <div className="flex flex-col gap-3 border-b border-stone-600 bg-stone-800 px-5 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
@@ -284,6 +378,19 @@ export default function DashboardPage() {
                 {d.reply_to_author && (
                   <p className="text-base font-medium text-amber-200/90">
                     Reply to <span className="text-amber-400">@{d.reply_to_author}</span>
+                    {d.metadata?.target_tweet_url && (
+                      <>
+                        {' '}
+                        <a
+                          href={d.metadata.target_tweet_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-normal text-sky-400 underline hover:text-sky-300"
+                        >
+                          (open target on X)
+                        </a>
+                      </>
+                    )}
                   </p>
                 )}
 
@@ -401,5 +508,13 @@ export default function DashboardPage() {
         </ul>
       )}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-lg text-stone-400">Loading drafts…</div>}>
+      <DashboardPageInner />
+    </Suspense>
   );
 }

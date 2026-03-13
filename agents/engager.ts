@@ -22,8 +22,15 @@ export type ReplyDraft = {
 };
 
 const MAX_REPLY_DRAFTS_PER_DAY = 12;
-const MIN_REPLY_LENGTH = 20;
+const MIN_REPLY_LENGTH = 12;
 const MAX_REPLY_LENGTH = 280;
+
+function normalizeReplyText(raw: string): string {
+  let s = raw.trim();
+  s = s.replace(/^["'`]+|["'`]+$/g, '').trim();
+  s = s.replace(/^Reply:\s*/i, '').trim();
+  return s.slice(0, MAX_REPLY_LENGTH);
+}
 
 export async function generateReplyDraft(context: DiscussionContext): Promise<ReplyDraft | null> {
   const identity = loadIdentity();
@@ -32,15 +39,15 @@ export async function generateReplyDraft(context: DiscussionContext): Promise<Re
 - Do not sound automated. No "Thanks for sharing!" or "Interesting perspective!"
 - Be concise. One or two sentences. Under 280 characters.
 - If you disagree, be precise and civil.
-- Output only the reply text, nothing else.`;
+- Output ONLY the reply tweet text on one line. No quotes around it. No preamble.`;
 
-  const user = `Post by @${context.author_handle}:\n"${context.content}"\n${context.thread_context ? `Context: ${context.thread_context}\n` : ''}\nWrite a single reply tweet:`;
+  const user = `Post by @${context.author_handle}:\n"${context.content.slice(0, 2000)}"\n${context.thread_context ? `Context: ${context.thread_context}\n` : ''}\nWrite a single reply tweet:`;
 
   const raw = await complete(
     [{ role: 'system', content: system }, { role: 'user', content: user }],
     { temperature: 0.6 }
   );
-  const content = raw.trim().slice(0, MAX_REPLY_LENGTH);
+  const content = normalizeReplyText(raw);
   if (content.length < MIN_REPLY_LENGTH) return null;
   return {
     content,
@@ -49,16 +56,18 @@ export async function generateReplyDraft(context: DiscussionContext): Promise<Re
   };
 }
 
-export async function saveReplyDraft(draft: ReplyDraft): Promise<string> {
+export async function saveReplyDraft(
+  draft: ReplyDraft,
+  metadata?: Record<string, unknown>
+): Promise<string> {
   const { data, error } = await supabase
-    .from('draft_posts')
+    .from('reply_drafts')
     .insert({
-      draft_type: 'reply',
       content: draft.content,
       reply_to_post_id: draft.reply_to_post_id,
       reply_to_author: draft.reply_to_author,
       status: 'draft',
-      metadata: {},
+      metadata: metadata ?? {},
     })
     .select('id')
     .single();
@@ -70,9 +79,8 @@ export async function countReplyDraftsToday(): Promise<number> {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const { count, error } = await supabase
-    .from('draft_posts')
+    .from('reply_drafts')
     .select('*', { count: 'exact', head: true })
-    .eq('draft_type', 'reply')
     .gte('created_at', start.toISOString());
   if (error) throw error;
   return count ?? 0;

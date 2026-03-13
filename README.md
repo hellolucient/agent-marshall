@@ -42,8 +42,8 @@ Copy `.env.example` to `.env` and set:
 - `SUPABASE_SERVICE_ROLE_KEY` — service role (server-only; never expose)
 - `CRON_SECRET` — optional; set in Vercel for cron auth (Bearer token)
 - `RESEARCH_RSS_FEEDS` — optional; comma-separated RSS feed URLs
-- `RESEARCH_TWITTER_QUERIES` — optional; comma-separated X **recent search** queries (needs `X_API_*`; paid tier often required). Defaults in `.env.example`: hallucination/calibration/epistemology/cognition-style queries aligned with Marshall. **Each query = one API call per daily run** (default list is 12 — trim if you hit rate limits).
-- X API keys — optional; if unset, publishing is simulated and drafts are stored
+- `RESEARCH_TWITTER_QUERIES` + `RESEARCH_TWITTER_MAX_QUERIES_PER_RUN` + `RESEARCH_TWITTER_MAX_PER_QUERY` — optional X search; **default lean: 1 query × 10 tweets per manual refresh**, **no Twitter on daily cron** unless `RESEARCH_TWITTER_ON_HEARTBEAT=true` (avoids surprise credit use).
+- X API keys — required for **Publish**; if unset, Publish fails and the draft stays **approved** (nothing marked published until X returns a tweet id). **403 when publishing (even if app already says Read & write):** the **Access Token + Secret in `.env` were almost certainly created while the app was still Read-only**. Changing the dropdown does **not** retroactively upgrade tokens. **Regenerate Access Token & Secret** (Keys and tokens tab), paste into `X_ACCESS_TOKEN` / `X_ACCESS_TOKEN_SECRET`, restart. Sanity check: open **`/api/x/verify`** while logged into the app (or curl locally) — if publish still 403 after fresh tokens, check X’s exact error (reply target deleted, code 453 account restriction, etc.).
 
 ### 3. Database
 
@@ -66,6 +66,7 @@ npm run dev
 
 - App: [http://localhost:3000](http://localhost:3000)
 - Dashboard: [http://localhost:3000/dashboard](http://localhost:3000/dashboard)
+- **Reply targets:** [http://localhost:3000/dashboard/replies](http://localhost:3000/dashboard/replies) — Twitter search hits → **Draft reply** → **Drafts** (approve) → **Publish** (posts as real X reply)
 
 ### 6. Manual cron (optional)
 
@@ -93,11 +94,14 @@ npm run cron:heartbeat weekly  # thread, Substack outline, reflection
 
 ## Dashboard
 
+**Fresh start (messy drafts):** run `memory/reset-database.sql` in Supabase SQL Editor (truncates research, ideas, drafts, published log, follows, etc.). Then run **Daily** heartbeat once.
+
 At **/dashboard** the operator can:
 
 - **Sign in** — Set `DASHBOARD_PASSWORD` in env; open `/login` once per browser. **Sign out** clears the session.
 - **Run heartbeat (manual)** — **Daily** = main pipeline (RSS → ideas → swarm → tweets → follow recs). **Weekly** = thread + Substack outline + reflection. No cron secret in the UI—your login cookie authorizes the request. Vercel Cron still uses `CRON_SECRET` only. Long runs: keep the tab open; or `npm run cron:heartbeat daily` locally.
-- **Drafts** — View tweets, threads, replies, Substack outlines. Filter by type and status.
+- **Post drafts** — Tweets, threads, Substack outlines (same DB table `draft_posts`).
+- **Reply drafts** — Separate table `reply_drafts`; created from Reply targets. Same approve → publish flow.
 - **Edit** draft content.
 - **Approve** or **Reject** drafts.
 - **Publish** approved tweets/threads/replies (calls Publisher agent; Substack is never auto-published).
@@ -114,10 +118,10 @@ At **/dashboard/follows**:
 1. **Research** — RSS (and later: saved articles, papers) → `research_items`
 2. **Idea generation** — Research + themes → 10+ candidate `post_ideas`
 3. **Swarm** — Each idea evaluated by Philosopher, Skeptic, Futurist, Editor, Signal Analyst; scores stored
-4. **Writing** — Top ideas → draft tweets (2/day), thread (1/week), Substack outline (1/week)
-5. **Engager** — Reply drafts from discussion context (8–12/day cap). POST to `/api/engager` with `{ "discussions": [ { "post_id", "author_handle", "content", "thread_context?" } ] }`.
+4. **Writing** — Top swarm-scored ideas → **5 tweet drafts/day** by default (`DAILY_TWEET_DRAFT_LIMIT`; `HEARTBEAT_SWARM_LIMIT` ≥ that). Weekly: thread + Substack outline
+5. **Engager** — Reply drafts (8–12/day cap). Publish: **reply** → **quote** → **standalone** (text + URL, when X blocks both reply and quote). POST `/api/engager` with `{ "discussions": [ … ] }`.
 6. **Networker** — 3–5 follow recommendations per day
-7. **Approval** — All content stays in `draft` until operator approves
+7. **Approval** — Post drafts in `draft_posts`; reply drafts in `reply_drafts` until approved
 8. **Publisher** — Approved items only; X only (Substack manual)
 9. **Reflection** — Weekly summary of engagement and performance
 
