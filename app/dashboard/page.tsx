@@ -133,32 +133,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="mt-4 space-y-4 text-base leading-relaxed text-stone-300">
-          <p>
-            <strong className="text-stone-100">Why two buttons?</strong> They match the two cron schedules.
-          </p>
-          <ul className="list-inside list-disc space-y-2 pl-1 text-stone-300 sm:list-outside sm:pl-5">
-            <li>
-              <strong className="text-amber-200/90">Daily</strong> — Your regular pipeline: pull RSS, generate
-              ideas, run the swarm on them, write <em>tweet</em> drafts, suggest people to follow. Use this most
-              days (same as daily CRON).
-            </li>
-            <li>
-              <strong className="text-amber-200/90">Weekly</strong> — Slower, longer-form pass: one{' '}
-              <em>thread</em> draft, a <em>Substack</em> outline, plus a short reflection note. Lighter load;
-              run once a week (same as weekly CRON).
-            </li>
-          </ul>
-          <p className="text-sm text-stone-500">
-            Daily can take <strong className="text-stone-400">several minutes</strong> (swarm). CLI:{' '}
-            <code className="rounded bg-stone-950 px-1.5 py-0.5 text-stone-400">
-              npm run cron:heartbeat daily
-            </code>{' '}
-            / <code className="rounded bg-stone-950 px-1.5 py-0.5 text-stone-400">weekly</code>
-          </p>
-        </div>
-
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <button
             type="button"
             disabled={heartbeatBusy}
@@ -190,6 +165,42 @@ export default function DashboardPage() {
             )}
           </button>
         </div>
+
+        <details className="group mt-4 rounded-xl border border-stone-700/80 bg-stone-950/50 open:border-stone-600 open:bg-stone-900/40">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-stone-400 transition hover:text-stone-200 [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex items-center gap-2">
+              <span className="text-stone-500 transition group-open:rotate-90">▸</span>
+              Manual heartbeat — what runs, timing, CLI
+            </span>
+          </summary>
+          <div className="space-y-4 border-t border-stone-700/80 px-4 pb-4 pt-3 text-base leading-relaxed text-stone-300">
+            <p>
+              <strong className="text-stone-100">Why two buttons?</strong> Same as the two cron jobs.
+            </p>
+            <ul className="list-inside list-disc space-y-2 pl-1 sm:list-outside sm:pl-5">
+              <li>
+                <strong className="text-amber-200/90">Daily</strong> — RSS → ideas → swarm →{' '}
+                <em>tweet</em> drafts → follow suggestions. Use most days.
+              </li>
+              <li>
+                <strong className="text-amber-200/90">Weekly</strong> — <em>Thread</em> draft,{' '}
+                <em>Substack</em> outline, reflection. Run about once a week.
+              </li>
+            </ul>
+            <p className="text-sm text-stone-500">
+              Daily can take <strong className="text-stone-400">several minutes</strong> (swarm). Keep this tab
+              open while it runs.
+            </p>
+            <p className="text-sm text-stone-500">
+              CLI:{' '}
+              <code className="rounded bg-stone-950 px-1.5 py-0.5 text-stone-400">
+                npm run cron:heartbeat daily
+              </code>{' '}
+              /{' '}
+              <code className="rounded bg-stone-950 px-1.5 py-0.5 text-stone-400">weekly</code>
+            </p>
+          </div>
+        </details>
 
         {heartbeatMsg && (
           <p

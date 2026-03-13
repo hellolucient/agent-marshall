@@ -5,7 +5,7 @@
 -- Research items (RSS, articles, papers, notes)
 CREATE TABLE IF NOT EXISTS public.research_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source_type TEXT NOT NULL, -- 'rss' | 'article' | 'paper' | 'manual_note' | 'ai_news'
+  source_type TEXT NOT NULL, -- 'rss' | 'article' | 'paper' | 'manual_note' | 'ai_news' | 'twitter'
   source_url TEXT,
   title TEXT NOT NULL,
   summary TEXT,

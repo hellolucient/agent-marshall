@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 const parser = new Parser();
 
 export type ResearchInput = {
-  source_type: 'rss' | 'article' | 'paper' | 'manual_note' | 'ai_news';
+  source_type: 'rss' | 'article' | 'paper' | 'manual_note' | 'ai_news' | 'twitter';
   source_url?: string;
   title: string;
   summary?: string;
@@ -68,19 +68,28 @@ export async function saveResearchItems(inputs: ResearchInput[]): Promise<string
   return ids;
 }
 
-/** Run research cycle: fetch RSS from env, dedupe by title/url, save new items. */
-export async function runResearchCycle(): Promise<{ saved: number }> {
+/** Run research cycle: RSS + optional Twitter recent search → dedupe → save. */
+export async function runResearchCycle(): Promise<{ saved: number; rss: number; twitter: number }> {
   const feedsEnv = process.env.RESEARCH_RSS_FEEDS;
   const feedUrls = feedsEnv ? feedsEnv.split(',').map((s) => s.trim()).filter(Boolean) : [];
-  if (feedUrls.length === 0) {
-    return { saved: 0 };
+  const rssItems =
+    feedUrls.length > 0 ? await fetchAllRssFeeds(feedUrls) : [];
+
+  const { fetchTwitterResearchInputs } = await import('@/agents/twitterResearch');
+  const twitterItems = await fetchTwitterResearchInputs();
+
+  const items = [...rssItems, ...twitterItems];
+  if (items.length === 0) {
+    return { saved: 0, rss: 0, twitter: 0 };
   }
-  const items = await fetchAllRssFeeds(feedUrls);
+
   const existing = await supabase.from('research_items').select('title, source_url').limit(5000);
   const existingSet = new Set(
     (existing.data ?? []).map((r) => `${r.title}|${r.source_url ?? ''}`)
   );
   const newItems = items.filter((i) => !existingSet.has(`${i.title}|${i.source_url ?? ''}`));
   const saved = await saveResearchItems(newItems);
-  return { saved: saved.length };
+  const rssNew = newItems.filter((i) => i.source_type === 'rss').length;
+  const twitterNew = newItems.filter((i) => i.source_type === 'twitter').length;
+  return { saved: saved.length, rss: rssNew, twitter: twitterNew };
 }

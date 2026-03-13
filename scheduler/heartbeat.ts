@@ -31,9 +31,12 @@ export async function runDaily(): Promise<Record<string, unknown>> {
   log('(Swarm is slow: each idea runs 5 LLM roles in series — can be many minutes.)');
   log(`Swarm limit this run: ${swarmLimit} ideas (set HEARTBEAT_SWARM_LIMIT to change)`);
 
-  log('1/5 Research (RSS)…');
+  log('1/5 Research (RSS + optional Twitter)…');
   const research = await runResearchCycle();
-  log(`   research saved: ${research.saved}`);
+  log(
+    `   research saved: ${research.saved}` +
+      (research.rss !== undefined ? ` (rss ${research.rss}, twitter ${research.twitter})` : '')
+  );
 
   log('2/5 Idea generation (1 LLM call)…');
   const ideas = await runIdeaGenerationCycle();

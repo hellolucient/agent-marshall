@@ -4,7 +4,7 @@ Editorial intelligence system for **Marshall S Martineau**, pseudonymous author 
 
 Agent Marshall is a **lean autonomous publishing system** that:
 
-- Researches ideas from RSS and notes
+- Researches ideas from **RSS** and optional **X/Twitter recent search** (same pipeline as articles → ideas → drafts)
 - Generates candidate ideas and runs them through an internal **swarm** (Philosopher, Skeptic, Futurist, Editor, Signal Analyst)
 - Produces drafts: tweets, threads, replies, Substack outlines
 - Surfaces follow recommendations
@@ -41,7 +41,8 @@ Copy `.env.example` to `.env` and set:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — anon key
 - `SUPABASE_SERVICE_ROLE_KEY` — service role (server-only; never expose)
 - `CRON_SECRET` — optional; set in Vercel for cron auth (Bearer token)
-- `RESEARCH_RSS_FEEDS` — optional; comma-separated RSS URLs for research
+- `RESEARCH_RSS_FEEDS` — optional; comma-separated RSS feed URLs
+- `RESEARCH_TWITTER_QUERIES` — optional; comma-separated X **recent search** queries (needs `X_API_*`; paid tier often required). Defaults in `.env.example`: hallucination/calibration/epistemology/cognition-style queries aligned with Marshall. **Each query = one API call per daily run** (default list is 12 — trim if you hit rate limits).
 - X API keys — optional; if unset, publishing is simulated and drafts are stored
 
 ### 3. Database
