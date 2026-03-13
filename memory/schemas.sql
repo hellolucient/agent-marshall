@@ -1,8 +1,9 @@
--- Agent Marshall — Supabase schema
--- Run in Supabase SQL editor or via migration
+-- Agent Marshall — Supabase schema (public)
+-- Run the ENTIRE file in Supabase SQL Editor → Run (one shot).
+-- Tables appear under Table Editor → schema "public".
 
 -- Research items (RSS, articles, papers, notes)
-CREATE TABLE IF NOT EXISTS research_items (
+CREATE TABLE IF NOT EXISTS public.research_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_type TEXT NOT NULL, -- 'rss' | 'article' | 'paper' | 'manual_note' | 'ai_news'
   source_url TEXT,
@@ -14,11 +15,11 @@ CREATE TABLE IF NOT EXISTS research_items (
   processed_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_research_items_created ON research_items(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_research_items_source ON research_items(source_type);
+CREATE INDEX IF NOT EXISTS idx_research_items_created ON public.research_items(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_research_items_source ON public.research_items(source_type);
 
 -- Post ideas (candidates before swarm)
-CREATE TABLE IF NOT EXISTS post_ideas (
+CREATE TABLE IF NOT EXISTS public.post_ideas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   research_item_ids UUID[],
   idea_text TEXT NOT NULL,
@@ -30,13 +31,13 @@ CREATE TABLE IF NOT EXISTS post_ideas (
   status TEXT DEFAULT 'candidate' -- 'candidate' | 'selected' | 'rejected'
 );
 
-CREATE INDEX IF NOT EXISTS idx_post_ideas_created ON post_ideas(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_post_ideas_status ON post_ideas(status);
+CREATE INDEX IF NOT EXISTS idx_post_ideas_created ON public.post_ideas(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_post_ideas_status ON public.post_ideas(status);
 
 -- Draft posts (tweets, threads, replies, substack)
-CREATE TABLE IF NOT EXISTS draft_posts (
+CREATE TABLE IF NOT EXISTS public.draft_posts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  post_idea_id UUID REFERENCES post_ideas(id),
+  post_idea_id UUID REFERENCES public.post_ideas(id),
   draft_type TEXT NOT NULL, -- 'tweet' | 'thread' | 'reply' | 'substack_outline'
   content TEXT, -- single tweet or first tweet of thread
   thread_tweets TEXT[], -- for threads: [tweet2, tweet3, ...]
@@ -50,14 +51,14 @@ CREATE TABLE IF NOT EXISTS draft_posts (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_draft_posts_status ON draft_posts(status);
-CREATE INDEX IF NOT EXISTS idx_draft_posts_type ON draft_posts(draft_type);
-CREATE INDEX IF NOT EXISTS idx_draft_posts_created ON draft_posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_draft_posts_status ON public.draft_posts(status);
+CREATE INDEX IF NOT EXISTS idx_draft_posts_type ON public.draft_posts(draft_type);
+CREATE INDEX IF NOT EXISTS idx_draft_posts_created ON public.draft_posts(created_at DESC);
 
 -- Published posts (record of what went out)
-CREATE TABLE IF NOT EXISTS published_posts (
+CREATE TABLE IF NOT EXISTS public.published_posts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  draft_post_id UUID REFERENCES draft_posts(id),
+  draft_post_id UUID REFERENCES public.draft_posts(id),
   platform TEXT NOT NULL, -- 'x' | 'substack'
   platform_post_id TEXT,
   content_preview TEXT,
@@ -66,10 +67,10 @@ CREATE TABLE IF NOT EXISTS published_posts (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_published_posts_published ON published_posts(published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_published_posts_published ON public.published_posts(published_at DESC);
 
 -- Interactions (replies we've made, mentions, DMs if ever)
-CREATE TABLE IF NOT EXISTS interactions (
+CREATE TABLE IF NOT EXISTS public.interactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   platform TEXT NOT NULL DEFAULT 'x',
   interaction_type TEXT NOT NULL, -- 'reply' | 'mention' | 'like'
@@ -82,10 +83,10 @@ CREATE TABLE IF NOT EXISTS interactions (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_interactions_created ON interactions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_interactions_created ON public.interactions(created_at DESC);
 
 -- Accounts Marshall follows or is recommended to follow
-CREATE TABLE IF NOT EXISTS followed_accounts (
+CREATE TABLE IF NOT EXISTS public.followed_accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   platform TEXT NOT NULL DEFAULT 'x',
   account_id TEXT,
@@ -99,26 +100,26 @@ CREATE TABLE IF NOT EXISTS followed_accounts (
   followed_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_followed_accounts_status ON followed_accounts(status);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_followed_accounts_handle ON followed_accounts(platform, handle);
+CREATE INDEX IF NOT EXISTS idx_followed_accounts_status ON public.followed_accounts(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_followed_accounts_handle ON public.followed_accounts(platform, handle);
 
 -- Performance metrics (engagement, growth)
-CREATE TABLE IF NOT EXISTS performance_metrics (
+CREATE TABLE IF NOT EXISTS public.performance_metrics (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   metric_type TEXT NOT NULL, -- 'engagement' | 'follower_change' | 'topic_performance'
   platform TEXT NOT NULL DEFAULT 'x',
-  post_id UUID REFERENCES draft_posts(id),
+  post_id UUID REFERENCES public.draft_posts(id),
   value NUMERIC,
   dimensions JSONB DEFAULT '{}', -- e.g. { topic, timeframe }
   recorded_at TIMESTAMPTZ DEFAULT now(),
   metadata JSONB DEFAULT '{}'
 );
 
-CREATE INDEX IF NOT EXISTS idx_performance_metrics_recorded ON performance_metrics(recorded_at DESC);
-CREATE INDEX IF NOT EXISTS idx_performance_metrics_type ON performance_metrics(metric_type);
+CREATE INDEX IF NOT EXISTS idx_performance_metrics_recorded ON public.performance_metrics(recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_performance_metrics_type ON public.performance_metrics(metric_type);
 
 -- Reflection notes (weekly analysis)
-CREATE TABLE IF NOT EXISTS reflection_notes (
+CREATE TABLE IF NOT EXISTS public.reflection_notes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   period_start DATE NOT NULL,
   period_end DATE NOT NULL,
@@ -131,4 +132,4 @@ CREATE TABLE IF NOT EXISTS reflection_notes (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_reflection_notes_period ON reflection_notes(period_end DESC);
+CREATE INDEX IF NOT EXISTS idx_reflection_notes_period ON public.reflection_notes(period_end DESC);

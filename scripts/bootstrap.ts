@@ -2,6 +2,7 @@
  * Bootstrap — Ensure env and optional DB state.
  * Run: npx tsx scripts/bootstrap.ts
  */
+import 'dotenv/config';
 
 async function main() {
   const required = ['OPENAI_API_KEY', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];

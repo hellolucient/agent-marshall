@@ -68,10 +68,14 @@ npm run dev
 
 ### 6. Manual cron (optional)
 
+Uses `.env` from the project root (same as `npm run dev`). Ensure `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set there.
+
 ```bash
 npm run cron:heartbeat daily   # research, ideas, swarm, tweets, follow recs
 npm run cron:heartbeat weekly  # thread, Substack outline, reflection
 ```
+
+**Why it looks “stuck”:** the daily job prints progress to stderr. The **swarm** step runs up to **5 ideas × 5 LLM roles** in sequence (often **5–15+ minutes**). For a quicker local run, set in `.env`: `HEARTBEAT_SWARM_LIMIT=1` or `2`.
 
 ---
 
@@ -90,6 +94,8 @@ npm run cron:heartbeat weekly  # thread, Substack outline, reflection
 
 At **/dashboard** the operator can:
 
+- **Sign in** — Set `DASHBOARD_PASSWORD` in env; open `/login` once per browser. **Sign out** clears the session.
+- **Run heartbeat (manual)** — **Daily** = main pipeline (RSS → ideas → swarm → tweets → follow recs). **Weekly** = thread + Substack outline + reflection. No cron secret in the UI—your login cookie authorizes the request. Vercel Cron still uses `CRON_SECRET` only. Long runs: keep the tab open; or `npm run cron:heartbeat daily` locally.
 - **Drafts** — View tweets, threads, replies, Substack outlines. Filter by type and status.
 - **Edit** draft content.
 - **Approve** or **Reject** drafts.

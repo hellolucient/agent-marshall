@@ -88,12 +88,19 @@ export async function saveSwarmResult(result: SwarmResult): Promise<void> {
 /** Run swarm on top N unscored ideas. */
 export async function runSwarmCycle(limit = 5): Promise<{ processed: number }> {
   const ideas = await getUnscoredIdeas(limit);
+  const total = ideas.length;
   let processed = 0;
-  for (const idea of ideas) {
+  for (let i = 0; i < ideas.length; i++) {
+    const idea = ideas[i];
+    const label = idea.idea_text?.slice(0, 50) ?? idea.id;
+    process.stderr.write(
+      `[swarm] Idea ${i + 1}/${total} (5 LLM calls): ${label}…\n`
+    );
     try {
       const result = await runSwarmForIdea(idea);
       await saveSwarmResult(result);
       processed++;
+      process.stderr.write(`[swarm]   done, aggregate_score=${result.aggregate_score}\n`);
     } catch (e) {
       console.error('Swarm failed for idea', idea.id, e);
     }
