@@ -1,17 +1,19 @@
 /**
  * Networker Agent — Identify relevant accounts Marshall should follow.
- * 3–5 recommendations per day; topic overlap, engagement quality, strategic relevance.
+ * 3–5 recommendations per day; prefers real authors from recent X research, validated via API.
  */
 
 import { complete } from '@/lib/llm';
 import { loadIdentity } from '@/lib/templates';
 import { supabase } from '@/lib/supabase';
+import { lookupXUser } from '@/lib/xClient';
 
 export type AccountRecommendation = {
   handle: string;
   display_name?: string;
   reason: string;
   topic_overlap?: string;
+  account_id?: string;
 };
 
 const MAX_RECOMMENDATIONS_PER_DAY = 5;
@@ -29,40 +31,125 @@ export async function getAlreadyRecommendedHandles(): Promise<Set<string>> {
   return new Set((data ?? []).map((r) => normHandle(r.handle)));
 }
 
-export async function recommendAccountsFromContext(context: string): Promise<AccountRecommendation[]> {
-  const identity = loadIdentity();
-  const system = `${identity}\n\nYou are suggesting X accounts for Marshall to consider following and engaging with.
+type TwitterAuthorCandidate = {
+  handle: string;
+  sample: string;
+};
 
-Marshall is a practical AI writer — not an academic. Suggest accounts Marshall could realistically reply to and learn from.
+/** Real @handles from recent Twitter research rows (not LLM-invented). */
+export async function getRecentTwitterAuthorCandidates(limit = 40): Promise<TwitterAuthorCandidate[]> {
+  const { data, error } = await supabase
+    .from('research_items')
+    .select('title, summary, metadata')
+    .eq('source_type', 'twitter')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
 
-TARGET: Mainstream AI enthusiasts, creators, and practitioners who discuss consumer and professional AI in plain language — ChatGPT, Claude, image/video AI, productivity workflows, AI tools for business, practical experiments, what's actually working.
+  const byHandle = new Map<string, string>();
+  for (const row of data ?? []) {
+    const meta = row.metadata as Record<string, unknown> | null;
+    const handle = normHandle(String(meta?.surfaceAuthor ?? ''));
+    if (!handle) continue;
+    if (!byHandle.has(handle)) {
+      const sample = String(row.summary ?? row.title ?? '').slice(0, 200);
+      byHandle.set(handle, sample);
+    }
+  }
+  return [...byHandle.entries()].map(([handle, sample]) => ({ handle, sample }));
+}
 
-PREFER: Accounts roughly 10k–500k followers. Active posters with real conversation in replies.
-
-AVOID: Academic researchers, university professors, epistemology/cognition specialists, AI safety theorists, big-name CEOs, mega-influencers Marshall couldn't meaningfully engage with, and accounts that only post papers or jargon.
-
-Output 3-5 recommendations in this format, one per line:
-@handle | Display Name | One sentence reason`;
-  const user = `Context (recent discussions, topics, or research):\n${context}\n\nList 3-5 account recommendations:`;
-  const raw = await complete(
-    [{ role: 'system', content: system }, { role: 'user', content: user }],
-    { temperature: 0.5 }
-  );
-  const lines = raw.split('\n').filter((l) => l.includes('|'));
+function parseRecommendationLines(raw: string): AccountRecommendation[] {
   const recs: AccountRecommendation[] = [];
-  const seen = await getAlreadyRecommendedHandles();
-  for (const line of lines) {
+  for (const line of raw.split('\n').filter((l) => l.includes('|'))) {
     const parts = line.split('|').map((p) => p.trim());
-    const handle = (parts[0]?.replace(/^@/, '') ?? '').trim().toLowerCase();
-    if (!handle || seen.has(handle)) continue;
+    const handle = normHandle(parts[0]?.replace(/^@/, '') ?? '');
+    if (!handle) continue;
     recs.push({
       handle,
       display_name: parts[1],
       reason: parts[2] ?? 'Relevant to Marshall\'s themes',
     });
-    if (recs.length >= MAX_RECOMMENDATIONS_PER_DAY) break;
   }
   return recs;
+}
+
+async function validateAndEnrich(rec: AccountRecommendation): Promise<AccountRecommendation | null> {
+  const user = await lookupXUser(rec.handle);
+  if (!user) {
+    console.warn(`[networker] Skipping @${rec.handle} — not found on X`);
+    return null;
+  }
+  return {
+    ...rec,
+    handle: user.username,
+    display_name: user.name || rec.display_name,
+    account_id: user.id,
+    topic_overlap: user.description?.slice(0, 200),
+  };
+}
+
+export async function recommendAccountsFromContext(context: string): Promise<AccountRecommendation[]> {
+  const identity = loadIdentity();
+  const seen = await getAlreadyRecommendedHandles();
+  const candidates = await getRecentTwitterAuthorCandidates();
+  const pool = candidates.filter((c) => !seen.has(c.handle));
+
+  const baseRules = `${identity}
+
+You are suggesting X accounts for Marshall to follow and engage with.
+Marshall is a practical AI writer — not an academic.
+TARGET: Mainstream AI enthusiasts, creators, practitioners (ChatGPT, Claude, tools, workflows).
+PREFER: ~10k–500k followers, active conversation.
+AVOID: Academics, AI safety theorists, mega-CEOs, jargon-only accounts.
+
+CRITICAL: Only recommend handles that exist on X. Never invent or guess usernames.
+
+Output 3-5 lines:
+@handle | Display Name | One sentence reason`;
+
+  let raw: string;
+
+  if (pool.length >= 3) {
+    const candidateList = pool
+      .map((c) => `@${c.handle} — recent post: "${c.sample.slice(0, 120)}${c.sample.length > 120 ? '…' : ''}"`)
+      .join('\n');
+    const system = `${baseRules}
+
+You MUST pick only from this verified list of real accounts seen in recent X research:
+${candidateList}`;
+    const user = `Context: ${context}\n\nPick 3-5 accounts from the list above. Do not add handles not in the list.`;
+    raw = await complete(
+      [{ role: 'system', content: system }, { role: 'user', content: user }],
+      { temperature: 0.3 }
+    );
+  } else {
+    const system = `${baseRules}
+
+No recent X research pool available. If you cannot name accounts you are certain exist, output fewer lines rather than guessing.`;
+    const user = `Context: ${context}\n\nList up to 3-5 account recommendations (only real, well-known handles):`;
+    raw = await complete(
+      [{ role: 'system', content: system }, { role: 'user', content: user }],
+      { temperature: 0.2 }
+    );
+  }
+
+  const parsed = parseRecommendationLines(raw);
+  const allowed = new Set(pool.map((c) => c.handle));
+  const validated: AccountRecommendation[] = [];
+
+  for (const rec of parsed) {
+    if (seen.has(rec.handle)) continue;
+    if (pool.length >= 3 && !allowed.has(rec.handle)) {
+      console.warn(`[networker] Skipping @${rec.handle} — not in research pool`);
+      continue;
+    }
+    const enriched = await validateAndEnrich(rec);
+    if (enriched) validated.push(enriched);
+    if (validated.length >= MAX_RECOMMENDATIONS_PER_DAY) break;
+  }
+
+  return validated;
 }
 
 export async function saveRecommendation(rec: AccountRecommendation): Promise<string> {
@@ -70,8 +157,10 @@ export async function saveRecommendation(rec: AccountRecommendation): Promise<st
     .from('followed_accounts')
     .insert({
       platform: 'x',
+      account_id: rec.account_id ?? null,
       handle: rec.handle,
       display_name: rec.display_name ?? null,
+      bio: rec.topic_overlap ?? null,
       recommendation_reason: rec.reason,
       status: 'recommended',
       metadata: rec.topic_overlap ? { topic_overlap: rec.topic_overlap } : {},
@@ -95,7 +184,7 @@ export async function countRecommendationsToday(): Promise<number> {
 }
 
 /** Run networker cycle: generate and save up to 5 recommendations. */
-export async function runNetworkerCycle(context: string): Promise<{ recommended: number }> {
+export async function runNetworkerCycle(context: string): Promise<{ recommended: number; skipped_invalid?: number }> {
   const existing = await countRecommendationsToday();
   const remaining = Math.max(0, MAX_RECOMMENDATIONS_PER_DAY - existing);
   if (remaining === 0) return { recommended: 0 };
