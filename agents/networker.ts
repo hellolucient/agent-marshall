@@ -56,7 +56,7 @@ export async function getRecentTwitterAuthorCandidates(limit = 40): Promise<Twit
       byHandle.set(handle, sample);
     }
   }
-  return [...byHandle.entries()].map(([handle, sample]) => ({ handle, sample }));
+  return Array.from(byHandle.entries()).map(([handle, sample]) => ({ handle, sample }));
 }
 
 function parseRecommendationLines(raw: string): AccountRecommendation[] {
