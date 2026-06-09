@@ -1,6 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import {
+  formatCount,
+  formatFollowedByFollowing,
+  formatJoinedDate,
+  xProfileUrl,
+  type XProfileDisplay,
+} from '@/lib/formatX';
 
 type Follow = {
   id: string;
@@ -9,6 +16,7 @@ type Follow = {
   recommendation_reason: string | null;
   status: string;
   created_at: string;
+  profile?: XProfileDisplay | null;
 };
 
 export default function FollowsPage() {
@@ -17,11 +25,12 @@ export default function FollowsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchFollows = async () => {
+  const fetchFollows = async (forceRefresh = false) => {
     setLoading(true);
     setError(null);
     const params = new URLSearchParams();
     if (statusFilter) params.set('accountStatus', statusFilter);
+    if (forceRefresh) params.set('refresh', '1');
     params.set('_t', String(Date.now()));
     const res = await fetch(`${window.location.origin}/api/follows?${params}`, {
       cache: 'no-store',
@@ -73,7 +82,8 @@ export default function FollowsPage() {
           Follow suggestions
         </h1>
         <p className="text-base text-stone-400 sm:text-lg">
-          Review suggested accounts and mark them followed or dismissed.
+          Review suggested accounts, open their X profile, then mark followed or dismissed here
+          (does not auto-follow on X).
         </p>
       </div>
 
@@ -96,75 +106,112 @@ export default function FollowsPage() {
         </select>
         <button
           type="button"
-          onClick={() => fetchFollows()}
+          onClick={() => fetchFollows(true)}
           className="min-h-[48px] rounded-xl border border-stone-600 px-4 py-2 text-stone-200 hover:bg-stone-800"
         >
-          Refresh
+          Refresh profiles
         </button>
       </div>
 
       {error && <p className="text-red-400">{error}</p>}
 
       {loading ? (
-        <p className="text-lg text-stone-400">Loading…</p>
+        <p className="text-lg text-stone-400">Loading profiles from X…</p>
       ) : follows.length === 0 ? (
         <p className="text-lg text-stone-400">No suggestions for this filter.</p>
       ) : (
         <ul className="flex flex-col gap-4 sm:gap-5">
-          {follows.map((f) => (
-            <li
-              key={f.id}
-              className="overflow-hidden rounded-2xl border border-stone-700/90 bg-stone-900/80 shadow-lg shadow-black/20"
-            >
-              <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
-                <div className="min-w-0 flex-1 space-y-3">
-                  <p className="break-words text-xl font-semibold text-amber-500 sm:text-2xl">
-                    @{f.handle}
-                  </p>
-                  {f.display_name && (
-                    <p className="text-lg font-medium text-stone-200 sm:text-xl">
-                      {f.display_name}
+          {follows.map((f) => {
+            const mutual = formatFollowedByFollowing(f.profile);
+            return (
+              <li
+                key={f.id}
+                className="overflow-hidden rounded-2xl border border-stone-700/90 bg-stone-900/80 shadow-lg shadow-black/20"
+              >
+                <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+                  <div className="min-w-0 flex-1 space-y-3">
+                    <p className="break-words text-xl font-semibold sm:text-2xl">
+                      <a
+                        href={xProfileUrl(f.handle)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-500 hover:text-amber-400 hover:underline"
+                      >
+                        @{f.handle}
+                      </a>
                     </p>
-                  )}
-                  {f.recommendation_reason && (
-                    <p className="max-w-prose text-base leading-relaxed text-stone-300 sm:text-lg sm:leading-relaxed">
-                      {f.recommendation_reason}
-                    </p>
-                  )}
-                  <p className="text-sm text-stone-500 sm:text-base">
-                    {new Date(f.created_at).toLocaleString(undefined, {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })}
-                  </p>
-                </div>
+                    {f.display_name && (
+                      <p className="text-lg font-medium text-stone-200 sm:text-xl">
+                        {f.display_name}
+                      </p>
+                    )}
 
-                <div className="flex flex-col gap-3 border-t border-stone-700/80 pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:border-t-0 sm:pt-0 lg:flex-col lg:items-stretch lg:border-l lg:border-stone-700/80 lg:pl-8">
-                  <span className="inline-flex w-fit rounded-full bg-stone-800 px-3 py-1.5 text-sm font-medium capitalize text-stone-300">
-                    {f.status}
-                  </span>
-                  {f.status === 'recommended' && (
-                    <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-                      <button
-                        type="button"
-                        onClick={() => updateStatus(f.id, 'followed')}
-                        className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-emerald-700 px-5 text-base font-semibold text-white transition hover:bg-emerald-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-900 sm:w-auto sm:min-w-[120px] lg:w-full"
-                      >
-                        Follow
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateStatus(f.id, 'dismissed')}
-                        className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-stone-600 bg-stone-800/80 px-5 text-base font-medium text-stone-200 transition hover:border-stone-500 hover:bg-stone-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-900 sm:w-auto sm:min-w-[120px] lg:w-full"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  )}
+                    {f.profile ? (
+                      <div className="space-y-1 text-sm text-stone-400 sm:text-base">
+                        <p>
+                          Joined {formatJoinedDate(f.profile.joined_at)}
+                          {' · '}
+                          {formatCount(f.profile.followers_count)} followers
+                          {' · '}
+                          {formatCount(f.profile.following_count)} following
+                          {' · '}
+                          {formatCount(f.profile.tweet_count)} posts
+                        </p>
+                        {mutual && <p className="text-stone-300">{mutual}</p>}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-stone-500">Profile stats unavailable</p>
+                    )}
+
+                    {f.recommendation_reason && (
+                      <p className="max-w-prose text-base leading-relaxed text-stone-300 sm:text-lg sm:leading-relaxed">
+                        {f.recommendation_reason}
+                      </p>
+                    )}
+                    <p className="text-sm text-stone-500 sm:text-base">
+                      Suggested{' '}
+                      {new Date(f.created_at).toLocaleString(undefined, {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-3 border-t border-stone-700/80 pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:border-t-0 sm:pt-0 lg:flex-col lg:items-stretch lg:border-l lg:border-stone-700/80 lg:pl-8">
+                    <span className="inline-flex w-fit rounded-full bg-stone-800 px-3 py-1.5 text-sm font-medium capitalize text-stone-300">
+                      {f.status}
+                    </span>
+                    <a
+                      href={xProfileUrl(f.handle)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-stone-600 bg-stone-800/80 px-5 text-base font-medium text-stone-200 transition hover:border-stone-500 hover:bg-stone-800 sm:w-auto lg:w-full"
+                    >
+                      View on X
+                    </a>
+                    {f.status === 'recommended' && (
+                      <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                        <button
+                          type="button"
+                          onClick={() => updateStatus(f.id, 'followed')}
+                          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-emerald-700 px-5 text-base font-semibold text-white transition hover:bg-emerald-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-900 sm:w-auto sm:min-w-[120px] lg:w-full"
+                        >
+                          Mark followed
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateStatus(f.id, 'dismissed')}
+                          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-stone-600 bg-stone-800/80 px-5 text-base font-medium text-stone-200 transition hover:border-stone-500 hover:bg-stone-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:ring-offset-2 focus-visible:ring-offset-stone-900 sm:w-auto sm:min-w-[120px] lg:w-full"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
