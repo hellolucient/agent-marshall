@@ -38,7 +38,7 @@ async function getTopScoredIdeas(limit: number): Promise<PostIdea[]> {
 
 async function writeTweetFromIdea(idea: PostIdea): Promise<string> {
   const identity = loadIdentity();
-  const system = `${identity}\n\nWrite a single tweet from this idea. Marshall's voice: calm, intellectual, concise. Max 280 characters. No hashtags, no engagement bait. Output only the tweet text.`;
+  const system = `${identity}\n\nWrite a single tweet from this idea. Marshall's voice: pragmatic, conversational, mildly provocative, plain English. Punchy and human — not academic or literary. Max 280 characters. No hashtags, no engagement bait. Output only the tweet text.`;
   const user = `Idea: ${idea.idea_text}`;
   return complete(
     [{ role: 'system', content: system }, { role: 'user', content: user }],
@@ -48,7 +48,7 @@ async function writeTweetFromIdea(idea: PostIdea): Promise<string> {
 
 async function writeThreadFromIdea(idea: PostIdea): Promise<string[]> {
   const identity = loadIdentity();
-  const system = `${identity}\n\nWrite a thread of 5-8 tweets from this idea. Each tweet on its own line. Number them 1., 2., etc. Marshall's voice: calm, intellectual, concise. No hashtags. Each line must be under 280 characters.`;
+  const system = `${identity}\n\nWrite a thread of 5-8 tweets from this idea. Each tweet on its own line. Number them 1., 2., etc. Marshall's voice: pragmatic, conversational, plain English. Use the thinking pattern where it fits: common assumption → gentle challenge → reframe → practical takeaway. Mix short punchy lines with longer ones. No hashtags. Each line must be under 280 characters.`;
   const user = `Idea: ${idea.idea_text}`;
   const raw = await complete(
     [{ role: 'system', content: system }, { role: 'user', content: user }],

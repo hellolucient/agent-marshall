@@ -1,6 +1,6 @@
 # Agent Marshall
 
-Editorial intelligence system for **Marshall S Martineau**, pseudonymous author of *Beyond Hallucinations*. Marshall writes about AI and truth, hallucinations and confidence, epistemology, cognition, and what AI reveals about human thinking.
+Editorial intelligence system for **Marshall S Martineau**, pseudonymous author of *Beyond Hallucinations*. Marshall is a practical AI translator for professionals — pragmatic, conversational, and grounded in real-world use (judgment, workflows, hallucinations in context), not academic epistemology.
 
 Agent Marshall is a **lean autonomous publishing system** that:
 

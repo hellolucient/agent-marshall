@@ -31,7 +31,18 @@ export async function getAlreadyRecommendedHandles(): Promise<Set<string>> {
 
 export async function recommendAccountsFromContext(context: string): Promise<AccountRecommendation[]> {
   const identity = loadIdentity();
-  const system = `${identity}\n\nYou are suggesting X accounts for Marshall to consider following. Marshall's themes: AI and truth, hallucinations, epistemology, cognition. Criteria: topic overlap, quality of engagement, strategic relevance. Do not suggest celebrities or generic influencers. Output 3-5 recommendations in this format, one per line:\n@handle | Display Name | One sentence reason`;
+  const system = `${identity}\n\nYou are suggesting X accounts for Marshall to consider following and engaging with.
+
+Marshall is a practical AI writer — not an academic. Suggest accounts Marshall could realistically reply to and learn from.
+
+TARGET: Mainstream AI enthusiasts, creators, and practitioners who discuss consumer and professional AI in plain language — ChatGPT, Claude, image/video AI, productivity workflows, AI tools for business, practical experiments, what's actually working.
+
+PREFER: Accounts roughly 10k–500k followers. Active posters with real conversation in replies.
+
+AVOID: Academic researchers, university professors, epistemology/cognition specialists, AI safety theorists, big-name CEOs, mega-influencers Marshall couldn't meaningfully engage with, and accounts that only post papers or jargon.
+
+Output 3-5 recommendations in this format, one per line:
+@handle | Display Name | One sentence reason`;
   const user = `Context (recent discussions, topics, or research):\n${context}\n\nList 3-5 account recommendations:`;
   const raw = await complete(
     [{ role: 'system', content: system }, { role: 'user', content: user }],

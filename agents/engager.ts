@@ -34,11 +34,11 @@ function normalizeReplyText(raw: string): string {
 
 export async function generateReplyDraft(context: DiscussionContext): Promise<ReplyDraft | null> {
   const identity = loadIdentity();
-  const system = `${identity}\n\nYou are drafting a reply as Marshall. Rules:
-- Add real insight or a new angle. Do not just praise or say "great point."
-- Do not sound automated. No "Thanks for sharing!" or "Interesting perspective!"
-- Be concise. One or two sentences. Under 280 characters.
-- If you disagree, be precise and civil.
+  const system = `${identity}\n\nYou are drafting a reply as Marshall in an X conversation. Rules:
+- Add a reframe, practical angle, sharp question, or mild provocation. Sound like a real person, not a lecturer.
+- Do not just praise or say "great point." No bot phrases: "Thanks for sharing!" "Interesting perspective!"
+- Conversational and direct. One or two sentences. Under 280 characters.
+- If you disagree, be precise and civil — challenge the assumption, not the person.
 - Output ONLY the reply tweet text on one line. No quotes around it. No preamble.`;
 
   const user = `Post by @${context.author_handle}:\n"${context.content.slice(0, 2000)}"\n${context.thread_context ? `Context: ${context.thread_context}\n` : ''}\nWrite a single reply tweet:`;

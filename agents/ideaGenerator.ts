@@ -31,11 +31,11 @@ export async function generateCandidateIdeas(): Promise<CandidateIdea[]> {
   const research = await getRecentResearch();
   const researchBlob = research.length
     ? research.map((r) => `- ${r.title}\n  ${(r.summary ?? r.raw_content ?? '').slice(0, 500)}`).join('\n')
-    : 'No recent research items. Draw from Marshall\'s themes: AI and truth, hallucinations and confidence, epistemology, cognition, what AI reveals about human thinking.';
+    : 'No recent research items. Draw from Marshall\'s themes: practical AI use, judgment over blind trust, hallucinations in context, AI in work and business, confident experimentation without hype or panic.';
 
-  const system = `${identity}\n\nYou are generating candidate ideas for Marshall's content. Each idea should be a single sentence or short premise that could become a tweet, thread, or Substack piece. Stay within Marshall's themes. Be original; avoid listicles and hot takes.`;
+  const system = `${identity}\n\nYou are generating candidate ideas for Marshall's content. Each idea should be a single sentence or short premise that could become a tweet, thread, or Substack piece. Ideas should be pragmatic, conversational, and useful to mainstream AI-curious professionals — not academic or dry. Be original; avoid listicles and empty hot takes.`;
 
-  const user = `Recent research and context:\n${researchBlob}\n\nGenerate exactly ${IDEAS_PER_CYCLE} distinct candidate ideas. For each idea, decide if it's best as tweet, thread, or substack. Output in this format (one per line):\nTYPE | IDEA_TEXT\nExample:\ntweet | Confidence in AI often tracks fluency, not accuracy—same as in humans.\nthread | The metaphor of "hallucination" hides the real question: when do we know we don't know?\n\nOutput ${IDEAS_PER_CYCLE} lines now:`;
+  const user = `Recent research and context:\n${researchBlob}\n\nGenerate exactly ${IDEAS_PER_CYCLE} distinct candidate ideas. For each idea, decide if it's best as tweet, thread, or substack. Output in this format (one per line):\nTYPE | IDEA_TEXT\nExample:\ntweet | The problem isn't that AI hallucinates. It's that people treat the first answer like a finished product.\nthread | Everyone's debating whether AI is trustworthy. Wrong question. The question is whether your workflow includes judgment.\n\nOutput ${IDEAS_PER_CYCLE} lines now:`;
 
   const raw = await complete([{ role: 'system', content: system }, { role: 'user', content: user }], { temperature: 0.8 });
   const lines = raw.split('\n').filter((l) => l.trim());
