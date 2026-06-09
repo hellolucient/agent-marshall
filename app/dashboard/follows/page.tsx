@@ -15,18 +15,46 @@ export default function FollowsPage() {
   const [follows, setFollows] = useState<Follow[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('recommended');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchFollows = async () => {
     setLoading(true);
-    const params = statusFilter ? `?status=${statusFilter}` : '';
-    const res = await fetch(`/api/follows${params}`);
+    setError(null);
+    const params = new URLSearchParams();
+    if (statusFilter) params.set('accountStatus', statusFilter);
+    params.set('_t', String(Date.now()));
+    const res = await fetch(`${window.location.origin}/api/follows?${params}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+    });
     const data = await res.json();
-    setFollows(Array.isArray(data) ? data : []);
+    if (!res.ok) {
+      setError(typeof data?.error === 'string' ? data.error : 'Failed to load follow suggestions');
+      setFollows([]);
+    } else {
+      setFollows(Array.isArray(data) ? data : []);
+    }
     setLoading(false);
   };
 
   useEffect(() => {
     fetchFollows();
+  }, [statusFilter]);
+
+  useEffect(() => {
+    const refetch = () => fetchFollows();
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) refetch();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refetch();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [statusFilter]);
 
   const updateStatus = async (id: string, status: string) => {
@@ -66,7 +94,16 @@ export default function FollowsPage() {
           <option value="followed">Followed</option>
           <option value="dismissed">Dismissed</option>
         </select>
+        <button
+          type="button"
+          onClick={() => fetchFollows()}
+          className="min-h-[48px] rounded-xl border border-stone-600 px-4 py-2 text-stone-200 hover:bg-stone-800"
+        >
+          Refresh
+        </button>
       </div>
+
+      {error && <p className="text-red-400">{error}</p>}
 
       {loading ? (
         <p className="text-lg text-stone-400">Loading…</p>
